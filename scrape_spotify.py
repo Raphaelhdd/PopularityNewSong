@@ -1,10 +1,16 @@
 import base64
+import time
+
 import requests
 import json
+# Milestone
+# client_id = 'f6ef862497644b69a7c3fd7c02917ffb'
+# client_secret = 'c57a91b370cb4b03a606a57cd1c057eb'
 
-client_id = 'f6ef862497644b69a7c3fd7c02917ffb'
-client_secret = 'c57a91b370cb4b03a606a57cd1c057eb'
 
+#Raph huji
+client_id = '8a8016324af74789b439da9f7203a463'
+client_secret = '7164149f6adc4e8e9b68b719228785ec'
 def get_token_spotify(client_id, client_secret):
     """
     This function takes the client_id and client_secret, encodes them in base64,
@@ -75,7 +81,13 @@ def get_track_info(token, track_id):
     headers = get_auth_headers(token)
     url = f"https://api.spotify.com/v1/tracks/{track_id}"
     response = requests.get(url, headers=headers)
-    track_info = response.json()
+    retry_after = int(response.headers.get('Retry-After',1))
+    print(retry_after)
+    time.sleep(retry_after)
+    try:
+        track_info = response.json()
+    except:
+        return None
     return track_info
 
 def get_audio_features(token, track_id):
@@ -86,6 +98,8 @@ def get_audio_features(token, track_id):
     headers = get_auth_headers(token)
     url = f"https://api.spotify.com/v1/audio-features/{track_id}"
     response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        time.sleep(20)
     audio_features = response.json()
     return audio_features
 
@@ -97,6 +111,8 @@ def get_artist_info(token, artist_id):
     headers = get_auth_headers(token)
     url = f"https://api.spotify.com/v1/artists/{artist_id}"
     response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        time.sleep(20)
     artist_info = response.json()
     return artist_info
 
@@ -122,9 +138,13 @@ def get_categories(token, country='US', limit=50):
     headers = get_auth_headers(token)
     url = f"https://api.spotify.com/v1/browse/categories?country={country}&limit={limit}"
     response = requests.get(url, headers=headers)
-    categories = response.json()
-    category_ids = [category['id'] for category in categories['categories']['items']]
-    return category_ids
+    if response.status_code != 200:
+        time.sleep(20)
+    else:
+        categories = response.json()
+        category_ids = [category['id'] for category in categories['categories']['items']]
+        return category_ids
+
 
 def get_playlists_for_category(token, category_id, limit=10):
     """
@@ -134,17 +154,23 @@ def get_playlists_for_category(token, category_id, limit=10):
     headers = get_auth_headers(token)
     url = f"https://api.spotify.com/v1/browse/categories/{category_id}/playlists?limit={limit}"
     response = requests.get(url, headers=headers)
-    playlists = response.json()
-    playlist_ids = [playlist['id'] for playlist in playlists['playlists']['items']]
-    return playlist_ids
+    if response.status_code != 200:
+        time.sleep(20)
+    else:
+        playlists = response.json()
+        playlist_ids = [playlist['id'] for playlist in playlists['playlists']['items']]
+        return playlist_ids
 
 
 def get_playlist_tracks(token, playlist_id):
     headers = get_auth_headers(token)
     url = f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks"
     response = requests.get(url, headers=headers)
-    playlist_tracks = response.json()
-    return playlist_tracks
+    if response.status_code != 200:
+        time.sleep(20)
+    else:
+        playlist_tracks = response.json()
+        return playlist_tracks
 
 
 def get_artists_from_playlists(token, playlist_ids):
@@ -163,11 +189,50 @@ def get_artists_from_playlists(token, playlist_ids):
     return list(artist_names)
 
 
+
+
 def analyze_artist_popularity(artists_info):
     sorted_artists = sorted(artists_info, key=lambda x: x['popularity'], reverse=True)
     return sorted_artists
 
 
+
+def get_playlist_details(token, playlist_id):
+    """
+    This function takes the access token and a playlist ID, retrieves detailed information
+    about the playlist from Spotify, and returns the playlist details.
+    """
+    print(playlist_id)
+    headers = get_auth_headers(token)
+    url = f"https://api.spotify.com/v1/playlists/{playlist_id}"
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        time.sleep(20)
+    else:
+        playlist_details = response.json()
+        return playlist_details
+
+def extract_tracks_from_playlist(playlist_details):
+    tracks = []
+    for item in playlist_details['tracks']['items']:
+        track = item['track']
+        if track:
+            tracks.append({
+                'track_id': track['id'],
+                'track_name': track['name'],
+                'artist_id': track['artists'][0]['id'],
+                'artist_name': track['artists'][0]['name'],
+                'album_id': track['album']['id'],
+                'album_name': track['album']['name'],
+                'popularity': track['popularity']
+            })
+    return tracks
+
+
+def get_track_info_and_audio_features(token, track_id):
+    track_info = get_track_info(token, track_id)
+    audio_features = get_audio_features(token, track_id)
+    return {**track_info, **audio_features}
 # token = get_token_spotify(client_id, client_secret)
 # category_ids = get_categories(token, country='IL', limit=50)
 # all_playlist_ids = []
