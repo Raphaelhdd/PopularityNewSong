@@ -52,13 +52,13 @@ def update_tracks_and_artists_in_db(tracks_db,artists_db, token_spotify, tracks)
     for track in tracks:
         track_id = track['track_id']
         artist_id = track['artist_id']
-        existing_track = tracks_db.find_one({"track_id": track_id})
+        existing_track = tracks_db.find_one({"id": track_id})
         if not existing_track:
             track_info = get_track_info_and_audio_features(token_spotify, track_id)
             if track_info != None:
                 tracks_db.insert_one(track_info)
                 # print(f"Inserted new track: {track_id}")
-        existing_artist = artists_db.find_one({"artist_id": artist_id})
+        existing_artist = artists_db.find_one({"id": artist_id})
         if not existing_artist:
             artist_info = get_artist_info(token_spotify, artist_id)
             if artist_info != None:
