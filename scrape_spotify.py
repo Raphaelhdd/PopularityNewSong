@@ -3,30 +3,8 @@ import time
 
 import requests
 import json
-# Milestone
-client_id = 'bbf867f24ccc4a659958c0143a01fe2d'
-client_secret = 'e0c45a79155b4c4f96c3c949857d6ec1'
-
-
-#Raph huji
-# client_id = '8a8016324af74789b439da9f7203a463'
-# client_secret = '7164149f6adc4e8e9b68b719228785ec'
-
-# Raph 2
-# client_id = "af47d6abadc24951be9d427ce7674fff"
-# client_secret = "a6ad80c487004559a1d1ef4c73712a10"
-
-# Raph 3
-# client_id = '9bbb858b7f274d7bac53ca44b0288f86'
-# client_secret = 'b7a52c2a83004efc80cd78fd38efa051'
-
-# raph 4
-# client_id = '984d68df30b74765a9391dc75da0dd77'
-# client_secret = 'afb1170f0ea444bd970aa76625246310'
-
-# raph 5
-# client_id = '37c700485f504ca49cdb7ecc15f259f5'
-# client_secret = '1d331b53a20649f1b85dedf3b1ac2d8e'
+client_id = '9be5d04bd3924bf9b26877db03eccf26'
+client_secret = 'fd63bfecc1724c8aa87a61ce758de4c8'
 
 def get_token_spotify(client_id, client_secret):
     """
