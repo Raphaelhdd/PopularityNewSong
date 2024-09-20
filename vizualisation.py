@@ -2,8 +2,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from collect_data import load_database
-
-
+from scipy.stats import pearsonr
+from sklearn.preprocessing import MinMaxScaler
 def plot_correlation_heatmap(tracks_df):
     """
     Generates a correlation heatmap for numeric features of tracks DataFrame.
@@ -69,14 +69,30 @@ def plot_duration_vs_popularity(tracks_df):
     Returns:
     - None
     """
-    plt.figure(figsize=(12, 6))
-    sns.scatterplot(x='duration_ms', y='popularity', data=tracks_df)
-    plt.title('Relationship Between Song Duration and Popularity')
-    plt.xlabel('Duration (ms)')
-    plt.ylabel('Popularity Index')
-    plt.savefig('duration_vs_popularity.png')
-    plt.show()
+    tracks_df['duration_s'] = tracks_df['duration_ms'] / 1000
 
+    # Filter the relevant range
+    filtered_df = tracks_df[(tracks_df['duration_s'] >= 0) & (tracks_df['duration_s'] <= 800)]
+
+    # Normalize the duration
+    scaler = MinMaxScaler()
+    filtered_df['duration_s_scaled'] = scaler.fit_transform(filtered_df[['duration_s']])
+
+    # Create duration bins
+    duration_bins = pd.cut(filtered_df['duration_s_scaled'], bins=20)  # 20 bins for normalized duration
+
+    # Calculate average popularity for each bin
+    avg_popularity_by_bin = filtered_df.groupby(duration_bins)['popularity'].mean().reset_index()
+
+    # Plotting
+    plt.figure(figsize=(12, 6))
+    sns.lineplot(x=avg_popularity_by_bin['duration_s_scaled'].apply(lambda x: x.mid), y=avg_popularity_by_bin['popularity'])
+    plt.title('Average Song Popularity by Normalized Duration Range')
+    plt.xlabel('Normalized Duration Range (0 to 1)')
+    plt.ylabel('Average Popularity Index')
+    plt.grid(True)
+    plt.savefig('avg_popularity_by_normalized_duration_range.png')
+    plt.show()
 
 def plot_audio_features_vs_popularity(tracks_df):
     """
@@ -88,24 +104,30 @@ def plot_audio_features_vs_popularity(tracks_df):
     """
     audio_features = ['danceability', 'energy', 'speechiness', 'acousticness', 'instrumentalness', 'liveness',
                       'valence', 'tempo']
-    plt.figure(figsize=(14, 8))
+    for feature in audio_features:
+        plt.figure(figsize=(8, 6))
 
-    for i, feature in enumerate(audio_features):
-        plt.subplot(3, 3, i + 1)
-        sns.kdeplot(
-            data=tracks_df, x=feature, y='popularity',
-            fill=True, cmap="viridis", thresh=0, levels=100
-        )
-        plt.title(f'{feature.capitalize()} vs Popularity')
+        # Create bins for the feature
+        if feature == 'tempo':
+            bins = pd.cut(tracks_df[feature], bins=range(0, 250, 10))
+        else:
+            bins = pd.cut(tracks_df[feature], bins=20)  # 20 bins for features between 0 and 1
+
+        # Calculate the average popularity for each bin
+        avg_popularity_by_bin = tracks_df.groupby(bins)['popularity'].mean().reset_index()
+
+        # Plotting
+        sns.lineplot(x=avg_popularity_by_bin[feature].apply(lambda x: x.mid), y=avg_popularity_by_bin['popularity'])
+
+        plt.title(f'{feature.capitalize()} vs Average Popularity')
         plt.xlabel(feature.capitalize())
-        plt.ylabel('Popularity Index')
+        plt.ylabel('Average Popularity Index')
 
-    plt.tight_layout()
-    plt.savefig('audio_features_vs_popularity_heatmap.png')
-    plt.show()
+        # Save each plot as a separate image file
+        plt.savefig(f'{feature}_vs_avg_popularity.png')
+        plt.show()
 
-
-def plot_popularity_by_album_type(tracks_df, artist_df, top_n_genres=20):
+def plot_popularity_by_album_type(tracks_df, artist_df, top_n_genres=10):
     """
     Plots the average song popularity by album type and genre based on artist associations.
     Args:
@@ -160,19 +182,25 @@ def plot_popularity_by_album_type(tracks_df, artist_df, top_n_genres=20):
     popularity_by_album_genre = popularity_by_album_genre.groupby(['album_type', 'genre'])[
         'popularity'].mean().reset_index()
 
-    plt.figure(figsize=(12, 8))
+    plt.figure(figsize=(14, 10))
     sns.barplot(x='album_type', y='popularity', hue='genre', data=popularity_by_album_genre, palette='Set3')
     plt.title('Average Song Popularity by Album Type and Genre')
     plt.xlabel('Album Type')
     plt.ylabel('Average Popularity Index')
     plt.xticks(rotation=45)
-    plt.legend(title='Genre', loc='upper right')
+    plt.legend(title='Genre', bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.tight_layout()
     plt.savefig('popularity_by_album_type_and_genre.png')
     plt.show()
 
     # Print the number of distinct genres being displayed
     displayed_genres = len(top_genres_set) + 1  # Including 'Other'
     print(f"Number of distinct genres being displayed: {displayed_genres}")
+
+    # Calculate and print the average popularity for each album type
+    avg_popularity_by_album_type = popularity_by_album_genre.groupby('album_type')['popularity'].mean()
+    print("\nAverage Popularity by Album Type:")
+    print(avg_popularity_by_album_type)
 
 
 
@@ -196,12 +224,72 @@ def plot_popularity_over_time(tracks_df):
     plt.tight_layout()
     plt.savefig('popularity_over_ime.png')
     plt.show()
+
+
 def find_documents_with_error_field(collection_name):
         cursor = collection_name.find({'audio': {'$exists': True}})
         print(len(cursor))
         # Print each document's _id that has the 'error' field
         # for document in cursor:
         #     print(f"Document _id with 'error' field: {document['id']}")
+
+
+def plot_genre_popularity_over_time(tracks_df, artist_df, genres_to_plot):
+    """
+    Plots the average song popularity over time for specified genres.
+    Args:
+    - tracks_df (pd.DataFrame): DataFrame containing track data with 'album', 'artists', 'popularity', and 'release_date' columns.
+    - artist_df (pd.DataFrame): DataFrame containing artist data with 'id', 'genres' columns.
+    - genres_to_plot (list): List of genres to plot.
+    Returns:
+    - None
+    """
+    # Map artist IDs to their genres
+    artist_genres = {}
+    for index, row in artist_df.iterrows():
+        artist_genres[row['id']] = row['genres']
+
+    def get_artist_genres(artist_ids):
+        genres = set()
+        for artist_id in artist_ids:
+            if artist_id in artist_genres:
+                genres.update(artist_genres[artist_id])
+        return list(genres)
+
+    tracks_df['artist_genres'] = tracks_df['artists'].apply(
+        lambda artists: get_artist_genres([artist['id'] for artist in artists])
+    )
+
+    # Filter tracks by genres of interest
+    def filter_genres(genres):
+        return [genre for genre in genres if genre in genres_to_plot]
+
+    tracks_df['filtered_genres'] = tracks_df['artist_genres'].apply(filter_genres)
+    tracks_filtered = tracks_df[
+        tracks_df['filtered_genres'].apply(len) > 0].copy()  # Create a copy to avoid SettingWithCopyWarning
+
+    # Convert release date to datetime
+    tracks_filtered.loc[:, 'release_date'] = pd.to_datetime(tracks_filtered['album'].apply(lambda x: x['release_date']))
+    tracks_filtered.loc[:, 'year'] = tracks_filtered['release_date'].dt.year
+
+    # Explode genres to have one row per genre
+    tracks_exploded = tracks_filtered.explode('filtered_genres')
+
+    # Group by year and genre to calculate average popularity
+    popularity_over_time = tracks_exploded.groupby(['year', 'filtered_genres'])['popularity'].mean().reset_index()
+
+    # Plotting
+    plt.figure(figsize=(12, 8))
+    sns.lineplot(x='year', y='popularity', hue='filtered_genres', data=popularity_over_time, marker='o')
+    plt.title('Average Song Popularity Over Time by Genre')
+    plt.xlabel('Year')
+    plt.ylabel('Average Popularity Index')
+    plt.legend(title='Genre')
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig('genre_popularity_over_time.png')
+    plt.show()
+
 
 
 if __name__ == '__main__':
@@ -241,8 +329,10 @@ if __name__ == '__main__':
     # plot_correlation_heatmap(tracks_df)
     # plot_popularity_distribution(tracks_df)
     # plot_popularity_by_genre_count(artist_df)
-    # plot_duration_vs_popularity(tracks_df)
+    plot_duration_vs_popularity(tracks_df)
     # plot_audio_features_vs_popularity(tracks_df)
-    plot_popularity_by_album_type(tracks_df, artist_df)
+    # plot_popularity_by_album_type(tracks_df, artist_df)
     # plot_popularity_over_time(tracks_df)
     #
+    # genres_to_plot = ['pop', 'rock', 'rap', 'r&b']
+    # plot_genre_popularity_over_time(tracks_df, artist_df, genres_to_plot)
